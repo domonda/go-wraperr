@@ -51,7 +51,12 @@ func formatCallStack(e callStackProvider) string {
 	if !ok {
 		return "insufficient call stack"
 	}
-	return fmt.Sprintf("%s\n    %s:%d", frame.Function, frame.File, frame.Line)
+	return fmt.Sprintf(
+		"%s\n    %s:%d",
+		frame.Function,
+		frame.File,
+		frame.Line,
+	)
 }
 
 func formatCallStackParams(e callStackParamsProvider) string {
@@ -60,7 +65,13 @@ func formatCallStackParams(e callStackParamsProvider) string {
 	if !ok {
 		return "insufficient call stack"
 	}
-	return fmt.Sprintf("%s(%s)\n    %s:%d", frame.Function, formatParams(params), frame.File, frame.Line)
+	return fmt.Sprintf(
+		"%s(%s)\n    %s:%d",
+		frame.Function,
+		formatParams(params),
+		frame.File,
+		frame.Line,
+	)
 }
 
 func formatParams(params []interface{}) string {
@@ -80,41 +91,30 @@ func formatParam(param interface{}) string {
 		return "<nil>"
 	}
 
-	switch a := param.(type) {
+	// Types typically not passed as pointers to type
+	switch x := param.(type) {
 	case error:
-		return fmt.Sprintf("error(%q)", a.Error())
+		return fmt.Sprintf("error(%q)", x.Error())
 
 	case fmt.Stringer:
-		return fmt.Sprintf("%q", a.String())
+		return fmt.Sprintf("%q", x.String())
 
 	case []byte:
-		if len(a) > 300 {
-			return fmt.Sprintf("[%d]byte(%q...)", len(a), a[:10])
+		if len(x) > 300 {
+			return fmt.Sprintf("[%d]byte(%q)", len(x), string(x[:20])+"...")
 		}
-		return fmt.Sprintf("[]byte(%q)", a)
+		return fmt.Sprintf("[]byte(%q)", x)
 	}
 
-	if v.Kind() == reflect.Ptr {
-		switch v.Elem().Kind() {
-		case reflect.Struct:
-			// handle futher down
-
-		case reflect.Func:
-			return "<func>"
-
-		case reflect.Chan:
-			return "<chan>"
-
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			// "%#v" would return hex literal
-			return fmt.Sprintf("%d", v.Elem().Interface())
-
-		default:
-			return fmt.Sprintf("%#v", v.Elem().Interface())
-		}
+	// Dereference pointers
+	for v.Kind() == reflect.Ptr && !v.IsNil() {
+		v = v.Elem()
+	}
+	if isNil(v) {
+		return "<nil>"
 	}
 
-	switch t := derefType(v.Type()); t.Kind() {
+	switch v.Kind() {
 	case reflect.Func:
 		return "<func>"
 
@@ -122,18 +122,30 @@ func formatParam(param interface{}) string {
 		return "<chan>"
 
 	case reflect.Struct:
-		bytes, err := json.Marshal(param)
+		bytes, err := json.Marshal(v.Interface())
 		if err != nil {
-			return t.Name() + "marshaling error"
+			return v.Type().Name() + "(marshaling error)"
 		}
-		return t.Name() + string(bytes)
+		return v.Type().Name() + string(bytes)
+
+	case reflect.Array, reflect.Slice:
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s{", v.Type())
+		for i := 0; i < v.Len(); i++ {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(formatParam(v.Index(i).Interface()))
+		}
+		b.WriteByte('}')
+		return b.String()
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		// "%#v" would return hex literal
-		return fmt.Sprintf("%d", param)
+		// %#v would produce hex number for uint so use %d
+		return fmt.Sprintf("%d", v.Interface())
 
 	default:
-		return fmt.Sprintf("%#v", param)
+		return fmt.Sprintf("%#v", v.Interface())
 	}
 }
 
@@ -150,11 +162,4 @@ func isNil(v reflect.Value) bool {
 		return v.IsNil()
 	}
 	return false
-}
-
-func derefType(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	return t
 }
