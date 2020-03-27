@@ -42,9 +42,10 @@ func RecoverPanicAsErrorWithFuncParams(resultVar *error, params ...interface{}) 
 	err := newWithFuncParamsSkip(1, AsError(p), params...)
 
 	if *resultVar != nil {
-		// TODO wrap existing error result to not loose it
+		*resultVar = fmt.Errorf("function returning error %s paniced with: %w", *resultVar, err)
+	} else {
+		*resultVar = err
 	}
-	*resultVar = err
 }
 
 func AsError(val interface{}) error {
