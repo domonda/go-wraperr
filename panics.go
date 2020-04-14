@@ -48,6 +48,7 @@ func RecoverPanicAsErrorWithFuncParams(resultVar *error, params ...interface{}) 
 	}
 }
 
+// AsError converts val to an error without wrapping it.
 func AsError(val interface{}) error {
 	switch x := val.(type) {
 	case nil:
