@@ -1,6 +1,7 @@
 package wraperr
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,6 +96,9 @@ func formatParam(param interface{}) string {
 	switch x := param.(type) {
 	case error:
 		return fmt.Sprintf("error(%q)", x.Error())
+
+	case context.Context:
+		return fmt.Sprintf("Context{Err:%v}", x.Err())
 
 	case fmt.Stringer:
 		return fmt.Sprintf("%q", x.String())
